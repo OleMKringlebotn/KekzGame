@@ -144,22 +144,28 @@ with tab1:
     # --- GAME SETUP SCREEN ---
     if not st.session_state.game_active:
         st.subheader("Game Setup")
-        num_players = st.number_input("Number of Players", min_value=1, max_value=10, value=2)
         
-        player_names = []
-        for i in range(num_players):
-            name = st.text_input(f"Player {i+1} Name", placeholder=f"Player {i+1}").strip()
-            player_names.append(name if name else f"Player {i+1}")
+        # Player count selector outside form to dynamically render player name inputs
+        num_players = st.number_input("Number of Players", min_value=1, max_value=10, value=2, key="setup_num_players")
+        
+        # Form wrapper enables Enter key submission for setup
+        with st.form(key="game_setup_form"):
+            player_names_input = []
+            for i in range(num_players):
+                name = st.text_input(f"Player {i+1} Name", placeholder=f"Player {i+1}", key=f"setup_p_{i}").strip()
+                player_names_input.append(name if name else f"Player {i+1}")
+                
+            kekz_val_input = st.number_input("Kekz-Value (Target)", min_value=1, max_value=501, value=60, key="setup_kekz_val")
             
-        kekz_value = st.number_input("Kekz-Value (Target)", min_value=1, max_value=501, value=60)
-        
-        if st.button("🚀 Start Game", use_container_width=True):
+            start_submitted = st.form_submit_button("🚀 Start Game", use_container_width=True)
+            
+        if start_submitted:
             st.session_state.score = 501
             st.session_state.current_checkpoint = 501
             st.session_state.round_num = 1
-            st.session_state.player_names = player_names
+            st.session_state.player_names = player_names_input
             st.session_state.initial_num_players = num_players
-            st.session_state.initial_kekz_value = kekz_value
+            st.session_state.initial_kekz_value = kekz_val_input
             st.session_state.game_active = True
             st.session_state.history_stack = []
             st.session_state.show_victory_prompt = False
