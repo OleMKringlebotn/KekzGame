@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import requests
 import json
 from datetime import datetime
@@ -217,26 +216,6 @@ with tab1:
                 
         # --- STANDARD INPUT FORM ---
         else:
-            # Script to traverse iframe DOM and force focus onto the first input box
-            components.html(
-                """
-                <script>
-                function focusFirstInput() {
-                    var doc = window.parent.document;
-                    var inputs = doc.querySelectorAll('input[type="number"]');
-                    if (inputs.length > 0) {
-                        inputs[0].focus();
-                        inputs[0].select();
-                    }
-                }
-                setTimeout(focusFirstInput, 300);
-                setTimeout(focusFirstInput, 600);
-                </script>
-                """,
-                height=0,
-                width=0
-            )
-            
             with st.form(key="round_scores_form"):
                 st.write("Enter scores for this round:")
                 round_inputs = []
