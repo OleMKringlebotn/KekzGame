@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import json
 from datetime import datetime
@@ -13,22 +14,20 @@ HEADERS = {
     "X-Bin-Meta": "false"
 }
 
+# Caching speeds up execution drastically by preventing HTTP calls during gameplay reruns
+@st.cache_data(ttl=300)
 def load_scoreboard():
-    """Fetch live scoreboard from JSONBin cloud database."""
+    """Fetch live scoreboard from JSONBin cloud database (cached)."""
     if not BIN_ID or not API_KEY:
-        st.warning("⚠️ Database credentials missing in Streamlit Secrets!")
         return []
     
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
     try:
-        response = requests.get(url, headers=HEADERS)
+        response = requests.get(url, headers=HEADERS, timeout=5)
         if response.status_code == 200:
             return response.json()
-        else:
-            st.error(f"Failed to fetch scoreboard from cloud (Status: {response.status_code})")
-            return []
-    except Exception as e:
-        st.error(f"Database connection error: {e}")
+        return []
+    except Exception:
         return []
 
 def save_victory(player_names, num_players, rounds, kekz_value):
@@ -46,8 +45,9 @@ def save_victory(player_names, num_players, rounds, kekz_value):
     
     url = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
     try:
-        res = requests.put(url, json=data, headers=HEADERS)
+        res = requests.put(url, json=data, headers=HEADERS, timeout=5)
         if res.status_code == 200:
+            st.cache_data.clear() # Clear cache so new record shows immediately
             st.toast("🏆 Record permanently saved to Cloud Leaderboard!")
         else:
             st.error("Failed to save record to cloud database.")
@@ -58,6 +58,21 @@ def get_checkpoint_ceiling(score, kekz_value):
     checkpoints = [501, 401, 301, 201, 101, kekz_value]
     reached = [cp for cp in checkpoints if score <= cp]
     return min(reached) if reached else 501
+
+def focus_first_input():
+    """Injects JavaScript to focus the first number input field in the form."""
+    js_code = """
+    <script>
+    setTimeout(function() {
+        var inputs = window.parent.document.querySelectorAll('input[type="number"]');
+        if (inputs.length > 0) {
+            inputs[0].focus();
+            inputs[0].select();
+        }
+    }, 150);
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
 
 # --- STREAMLIT UI SETUP ---
 st.set_page_config(page_title="Kekz Darts", page_icon="🎯", layout="centered")
@@ -218,6 +233,9 @@ with tab1:
                 
         # --- STANDARD INPUT FORM ---
         else:
+            # Inject auto-focus script into input form
+            focus_first_input()
+            
             with st.form(key="round_scores_form"):
                 st.write("Enter scores for this round:")
                 round_inputs = []
