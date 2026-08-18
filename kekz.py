@@ -1,21 +1,38 @@
 import streamlit as st
+import requests
 import json
-import os
 from datetime import datetime
 
-# --- DATABASE FUNCTIONS FOR SCOREBOARD ---
-DB_FILE = "kekz_scoreboard.json"
+# --- DATABASE CONFIGURATION (JSONBin.io Cloud Sync) ---
+BIN_ID = st.secrets.get("JSONBIN_BIN_ID", "")
+API_KEY = st.secrets.get("JSONBIN_API_KEY", "")
+
+HEADERS = {
+    "Content-Type": "application/json",
+    "X-Master-Key": API_KEY,
+    "X-Bin-Meta": "false"
+}
 
 def load_scoreboard():
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r") as f:
-                return json.load(f)
-        except:
+    """Fetch live scoreboard from JSONBin cloud database."""
+    if not BIN_ID or not API_KEY:
+        st.warning("⚠️ Database credentials missing in Streamlit Secrets!")
+        return []
+    
+    url = f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest"
+    try:
+        response = requests.get(url, headers=HEADERS)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Failed to fetch scoreboard from cloud (Status: {response.status_code})")
             return []
-    return []
+    except Exception as e:
+        st.error(f"Database connection error: {e}")
+        return []
 
 def save_victory(player_names, num_players, rounds, kekz_value):
+    """Append new victory record and update JSONBin cloud database."""
     data = load_scoreboard()
     new_record = {
         "date": datetime.now().strftime("%Y-%m-%d"),
@@ -26,8 +43,16 @@ def save_victory(player_names, num_players, rounds, kekz_value):
         "rounds": rounds
     }
     data.append(new_record)
-    with open(DB_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+    
+    url = f"https://api.jsonbin.io/v3/b/{BIN_ID}"
+    try:
+        res = requests.put(url, json=data, headers=HEADERS)
+        if res.status_code == 200:
+            st.toast("🏆 Record permanently saved to Cloud Leaderboard!")
+        else:
+            st.error("Failed to save record to cloud database.")
+    except Exception as e:
+        st.error(f"Save error: {e}")
 
 def get_checkpoint_ceiling(score, kekz_value):
     checkpoints = [501, 401, 301, 201, 101, kekz_value]
@@ -40,7 +65,7 @@ st.set_page_config(page_title="Kekz Darts", page_icon="🎯", layout="centered")
 # App Navigation Tabs
 tab1, tab2 = st.tabs(["🎮 Play Kekz", "🏆 Leaderboards"])
 
-# --- TAB 2: SCOREBOARD (Separated by Team Size + Smart Year Filters) ---
+# --- TAB 2: SCOREBOARD (Cloud Synced & Filtered) ---
 with tab2:
     st.header("🏆 Kekz Hall of Fame")
     scores_data = load_scoreboard()
@@ -48,41 +73,35 @@ with tab2:
     if not scores_data:
         st.info("No records logged yet. Go get a win!")
     else:
-        # Build dynamic dropdown filter menu options
-        # We find all years in the file that are 2026 or newer
         recorded_years = set()
         has_pre_2026 = False
         
         for r in scores_data:
-            yr_str = r.get("year", "2026")
+            yr_str = str(r.get("year", "2026"))
             try:
                 if int(yr_str) >= 2026:
                     recorded_years.add(yr_str)
                 else:
                     has_pre_2026 = True
             except ValueError:
-                # If a user manually typed "Pre-2026" inside the json file directly, catch it
                 if yr_str == "Pre-2026":
                     has_pre_2026 = True
                 else:
                     recorded_years.add(yr_str)
                     
         sorted_years = sorted(list(recorded_years), reverse=True)
-        
-        # Assemble the dropdown selections menu
         dropdown_options = ["All-Time Best"] + sorted_years
         if has_pre_2026:
             dropdown_options.append("Pre-2026")
             
         selected_view = st.selectbox("📅 Select Scoreboard View:", dropdown_options)
         
-        # Apply the filter math based on the user selection
         if selected_view == "All-Time Best":
             filtered = scores_data
         elif selected_view == "Pre-2026":
             filtered = []
             for r in scores_data:
-                yr_str = r.get("year", "2026")
+                yr_str = str(r.get("year", "2026"))
                 if yr_str == "Pre-2026":
                     filtered.append(r)
                 else:
@@ -92,12 +111,11 @@ with tab2:
                     except ValueError:
                         pass
         else:
-            filtered = [r for r in scores_data if r.get("year") == selected_view]
+            filtered = [r for r in scores_data if str(r.get("year")) == str(selected_view)]
             
         if not filtered:
             st.warning(f"No records found for: {selected_view}")
         else:
-            # Group records by team size (num_players)
             team_sizes = sorted(list(set([r["num_players"] for r in filtered])))
             
             for size in team_sizes:
@@ -177,7 +195,6 @@ with tab1:
                     st.session_state.round_num, 
                     st.session_state.initial_kekz_value
                 )
-                st.toast("Record saved to Leaderboard!")
                 st.session_state.game_active = False
                 st.rerun()
                 
@@ -204,8 +221,19 @@ with tab1:
             with st.form(key="round_scores_form"):
                 st.write("Enter scores for this round:")
                 round_inputs = []
-                for name in st.session_state.player_names:
-                    score_in = st.number_input(f"{name}'s score", min_value=0, max_value=180, value=0, step=1)
+                for idx, name in enumerate(st.session_state.player_names):
+                    input_key = f"input_r{st.session_state.round_num}_{idx}"
+                    is_first = (idx == 0)
+                    
+                    score_in = st.number_input(
+                        f"{name}'s score", 
+                        min_value=0, 
+                        max_value=180, 
+                        value=0, 
+                        step=1,
+                        key=input_key,
+                        autofocus=is_first
+                    )
                     round_inputs.append(score_in)
                 
                 submit_button = st.form_submit_button(label="Submit Round Scores", use_container_width=True)
