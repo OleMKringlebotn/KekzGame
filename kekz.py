@@ -223,7 +223,6 @@ with tab1:
                 round_inputs = []
                 for idx, name in enumerate(st.session_state.player_names):
                     input_key = f"input_r{st.session_state.round_num}_{idx}"
-                    is_first = (idx == 0)
                     
                     score_in = st.number_input(
                         f"{name}'s score", 
@@ -231,8 +230,7 @@ with tab1:
                         max_value=180, 
                         value=0, 
                         step=1,
-                        key=input_key,
-                        autofocus=is_first
+                        key=input_key
                     )
                     round_inputs.append(score_in)
                 
@@ -296,6 +294,7 @@ with tab1:
                     if next_start != 0:
                         st.session_state.player_names = st.session_state.player_names[next_start:] + st.session_state.player_names[:next_start]
                 
+                st.round_num += 1 if "round_num" in dir(st) else None # fallback safety
                 st.session_state.round_num += 1
                 st.rerun()
         
