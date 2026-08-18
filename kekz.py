@@ -294,7 +294,6 @@ with tab1:
                     if next_start != 0:
                         st.session_state.player_names = st.session_state.player_names[next_start:] + st.session_state.player_names[:next_start]
                 
-                st.round_num += 1 if "round_num" in dir(st) else None # fallback safety
                 st.session_state.round_num += 1
                 st.rerun()
         
