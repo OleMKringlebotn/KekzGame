@@ -263,9 +263,8 @@ with tab1:
                     next_cp = max(target_cps)
                     pts_needed = effective_score - next_cp
                     st.info(f"🎯 **{pts_needed}** points needed to hit next checkpoint (**{next_cp}**)")
-                elif effective_score == st.session_state.initial_kekz_value:
-                    st.success("🎯 **0** points needed — Final Checkpoint Reached!")
                 else:
+                    # Passed or reached the final checkpoint — calculate points directly to WIN
                     pts_to_win = effective_score
                     st.success(f"🏆 **{pts_to_win}** points needed to **WIN**!")
 
@@ -274,7 +273,6 @@ with tab1:
             # --- DYNAMIC CHECKPOINT TRACKER (RIGHT COLUMN) ---
             with col_cps:
                 st.write("### Checkpoints")
-                current_effective_checkpoint = get_checkpoint_ceiling(effective_score, st.session_state.initial_kekz_value)
                 
                 for cp in valid_cps:
                     # Mark checked if team's score/effective score has reached or cleared this checkpoint
