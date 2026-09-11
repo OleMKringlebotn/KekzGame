@@ -128,12 +128,27 @@ with tab2:
                 st.write(f"### 👥 Team Size: {size} Player{'s' if size > 1 else ''}")
                 
                 size_filtered = [r for r in filtered if r["num_players"] == size]
-                sorted_records = sorted(size_filtered, key=lambda x: x["rounds"])
                 
+                # Sort primarily by Kekz Value (descending), secondarily by Date (ascending)
+                sorted_records = sorted(
+                    size_filtered, 
+                    key=lambda x: (-x["kekz_value"], str(x.get("date", "")))
+                )
+                
+                # Assign ranks (handling ties for equal Kekz Value and Date)
                 display_table = []
+                current_rank = 1
                 for idx, r in enumerate(sorted_records):
+                    if idx > 0:
+                        prev_r = sorted_records[idx - 1]
+                        if (r["kekz_value"] == prev_r["kekz_value"]) and (r.get("date") == prev_r.get("date")):
+                            # Keep same rank if both Kekz Value and Date match
+                            pass
+                        else:
+                            current_rank = idx + 1
+                    
                     display_table.append({
-                        "Rank": idx + 1,
+                        "Rank": current_rank,
                         "Players": r["players"],
                         "Kekz Value": r["kekz_value"],
                         "Rounds to Win": r["rounds"],
@@ -264,7 +279,6 @@ with tab1:
                     pts_needed = effective_score - next_cp
                     st.info(f"🎯 **{pts_needed}** points needed to hit next checkpoint (**{next_cp}**)")
                 else:
-                    # Passed or reached the final checkpoint — calculate points directly to WIN
                     pts_to_win = effective_score
                     st.success(f"🏆 **{pts_to_win}** points needed to **WIN**!")
 
@@ -275,7 +289,6 @@ with tab1:
                 st.write("### Checkpoints")
                 
                 for cp in valid_cps:
-                    # Mark checked if team's score/effective score has reached or cleared this checkpoint
                     is_cleared = st.session_state.score <= cp or effective_score <= cp
                     if is_cleared:
                         st.markdown(f"✅ **`{cp}`**")
