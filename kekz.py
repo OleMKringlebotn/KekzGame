@@ -52,8 +52,16 @@ def save_victory(player_names, num_players, rounds, kekz_value):
     except Exception as e:
         st.error(f"Save error: {e}")
 
+def get_valid_checkpoints(kekz_value):
+    """Returns list of valid checkpoints, filtering out any standard checkpoints below kekz_value."""
+    standard_cps = [501, 401, 301, 201, 101]
+    valid_cps = [cp for cp in standard_cps if cp > kekz_value]
+    if kekz_value not in valid_cps:
+        valid_cps.append(kekz_value)
+    return sorted(valid_cps, reverse=True)
+
 def get_checkpoint_ceiling(score, kekz_value):
-    checkpoints = [501, 401, 301, 201, 101, kekz_value]
+    checkpoints = get_valid_checkpoints(kekz_value)
     reached = [cp for cp in checkpoints if score <= cp]
     return min(reached) if reached else 501
 
@@ -145,10 +153,8 @@ with tab1:
     if not st.session_state.game_active:
         st.subheader("Game Setup")
         
-        # Player count selector outside form to dynamically render player name inputs
         num_players = st.number_input("Number of Players", min_value=1, max_value=10, value=2, key="setup_num_players")
         
-        # Form wrapper enables Enter key submission for setup
         with st.form(key="game_setup_form"):
             player_names_input = []
             for i in range(num_players):
@@ -176,15 +182,21 @@ with tab1:
     else:
         st.subheader(f"Round {st.session_state.round_num}")
         
-        col1, col2 = st.columns(2)
-        col1.metric(label="Current Team Score", value=st.session_state.score)
-        col2.metric(label="Active Checkpoint", value=st.session_state.current_checkpoint)
-        
-        st.markdown(f"**Throwing Order:** {' ➔ '.join(st.session_state.player_names)}")
-        st.write(f"Target to beat this round: **{st.session_state.initial_kekz_value}**")
-        
+        # Determine valid checkpoints for current game parameters
+        valid_cps = get_valid_checkpoints(st.session_state.initial_kekz_value)
         winning_score_needed = st.session_state.initial_kekz_value if st.session_state.score == st.session_state.initial_kekz_value else (st.session_state.score + st.session_state.initial_kekz_value)
         
+        # Split main interface: Game Inputs (Left) and Checkpoint Tracker (Right)
+        col_game, col_cps = st.columns([2, 1])
+        
+        with col_game:
+            c1, c2 = st.columns(2)
+            c1.metric(label="Team Score", value=st.session_state.score)
+            c2.metric(label="Active Checkpoint", value=st.session_state.current_checkpoint)
+            
+            st.markdown(f"**Throwing Order:** {' ➔ '.join(st.session_state.player_names)}")
+            st.write(f"Target to beat this round: **{st.session_state.initial_kekz_value}**")
+
         # --- VICTORY STEP: DOUBLE OUT CONFIRMATION ---
         if st.session_state.show_victory_prompt:
             st.balloons()
@@ -192,7 +204,7 @@ with tab1:
             st.write("### ❓ Was the final dart a double?")
             
             c1, c2 = st.columns(2)
-            if c1.button("✅ Yes, it was a Double Out!", use_container_width=True):
+            if c1.button("✅ Yes, Double Out!", use_container_width=True):
                 save_victory(
                     st.session_state.player_names, 
                     st.session_state.initial_num_players, 
@@ -202,7 +214,7 @@ with tab1:
                 st.session_state.game_active = False
                 st.rerun()
                 
-            if c2.button("❌ No, regular single dart", use_container_width=True):
+            if c2.button("❌ No, Single Dart", use_container_width=True):
                 st.session_state.history_stack.append({
                     "score": st.session_state.score,
                     "checkpoint": st.session_state.current_checkpoint,
@@ -220,14 +232,13 @@ with tab1:
                 st.session_state.busted_index = None
                 st.rerun()
                 
-        # --- STANDARD INPUT FORM ---
+        # --- DYNAMIC SCORE INPUTS ---
         else:
-            with st.form(key="round_scores_form"):
-                st.write("Enter scores for this round:")
+            with col_game:
+                st.write("### Enter Scores:")
                 round_inputs = []
                 for idx, name in enumerate(st.session_state.player_names):
                     input_key = f"input_r{st.session_state.round_num}_{idx}"
-                    
                     score_in = st.number_input(
                         f"{name}'s score", 
                         min_value=0, 
@@ -238,8 +249,42 @@ with tab1:
                     )
                     round_inputs.append(score_in)
                 
-                submit_button = st.form_submit_button(label="Submit Round Scores", use_container_width=True)
-            
+                # Dynamic Calculations (Updates Live as Scores are Typed)
+                current_round_sum = sum(round_inputs)
+                effective_score = winning_score_needed - current_round_sum
+                
+                # Determine Next Target Checkpoint & Points Needed
+                target_cps = [cp for cp in valid_cps if cp < effective_score]
+                
+                st.markdown("---")
+                st.metric(label="📊 Round Score Sum", value=current_round_sum)
+                
+                if target_cps:
+                    next_cp = max(target_cps)
+                    pts_needed = effective_score - next_cp
+                    st.info(f"🎯 **{pts_needed}** points needed to hit next checkpoint (**{next_cp}**)")
+                elif effective_score == st.session_state.initial_kekz_value:
+                    st.success("🎯 **0** points needed — Final Checkpoint Reached!")
+                else:
+                    pts_to_win = effective_score
+                    st.success(f"🏆 **{pts_to_win}** points needed to **WIN**!")
+
+                submit_button = st.button("🚀 Submit Round", use_container_width=True, type="primary")
+
+            # --- DYNAMIC CHECKPOINT TRACKER (RIGHT COLUMN) ---
+            with col_cps:
+                st.write("### Checkpoints")
+                current_effective_checkpoint = get_checkpoint_ceiling(effective_score, st.session_state.initial_kekz_value)
+                
+                for cp in valid_cps:
+                    # Mark checked if team's score/effective score has reached or cleared this checkpoint
+                    is_cleared = st.session_state.score <= cp or effective_score <= cp
+                    if is_cleared:
+                        st.markdown(f"✅ **`{cp}`**")
+                    else:
+                        st.markdown(f"⚪ **`{cp}`**")
+
+            # --- ROUND SUBMISSION LOGIC ---
             if submit_button:
                 st.session_state.history_stack.append({
                     "score": st.session_state.score,
@@ -247,20 +292,19 @@ with tab1:
                     "roster": list(st.session_state.player_names)
                 })
                 
-                combined_round_score = 0
+                combined_round_score = current_round_sum
                 round_interrupted = False
                 busted_player_index = None
+                running_total = 0
                 
                 for idx, thrown in enumerate(round_inputs):
-                    combined_round_score += thrown
-                    
-                    if combined_round_score > winning_score_needed:
-                        st.error(f"💥 BUST! {st.session_state.player_names[idx]} pushed total score to {combined_round_score}, passing the win target of {winning_score_needed}!")
+                    running_total += thrown
+                    if running_total > winning_score_needed:
+                        st.error(f"💥 BUST! {st.session_state.player_names[idx]} pushed score to {running_total}, passing the target of {winning_score_needed}!")
                         busted_player_index = idx
                         round_interrupted = True
                         break
-                        
-                    if combined_round_score == winning_score_needed:
+                    if running_total == winning_score_needed:
                         busted_player_index = idx
                         break
                 
@@ -277,7 +321,7 @@ with tab1:
                         if potential_score <= st.session_state.initial_kekz_value:
                             st.session_state.score = st.session_state.initial_kekz_value
                             st.session_state.current_checkpoint = st.session_state.initial_kekz_value
-                            st.toast("Dropped to the final Kekz-value checkpoint!")
+                            st.toast("Dropped to final Kekz-value checkpoint!")
                         else:
                             st.session_state.score = potential_score
                             new_cp = get_checkpoint_ceiling(potential_score, st.session_state.initial_kekz_value)
